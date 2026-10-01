@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: legacy-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: legacy-app }
+  template:
+    metadata:
+      labels: { app: legacy-app }
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+        resources:
+          limits: { memory: 64Mi }
+      - name: pq-sidecar
+        image: envoyproxy/envoy@sha256:7eaa72cd386ad50c2a7744cac90a261458bf9b76197ca72e38f906fa9fd9bb96
+        args: ["envoy", "-c", "/etc/sidecar/config/sidecar.yaml"]
+        ports:
+        - containerPort: 8445
+        resources:
+          limits: { memory: 128Mi }
+        volumeMounts:
+        - { name: sidecar-config, mountPath: /etc/sidecar/config, readOnly: true }
+        - { name: sidecar-tls, mountPath: /etc/sidecar/tls, readOnly: true }
+      volumes:
+      - name: sidecar-config
+        configMap: { name: sidecar-config }
+      - name: sidecar-tls
+        secret: { secretName: sidecar-tls, defaultMode: 0444 }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: legacy-app
+spec:
+  selector: { app: legacy-app }
+  ports:
+  - port: 8445
+    targetPort: 8445

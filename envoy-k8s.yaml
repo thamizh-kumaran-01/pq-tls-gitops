@@ -1,0 +1,97 @@
+static_resources:
+  listeners:
+  - name: ecdsa_listener
+    address:
+      socket_address: { address: 0.0.0.0, port_value: 8443 }
+    filter_chains:
+    - transport_socket:
+        name: envoy.transport_sockets.tls
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
+          common_tls_context:
+            tls_params:
+              tls_minimum_protocol_version: TLSv1_3
+              ecdh_curves:
+              - X25519MLKEM768
+              - X25519
+            tls_certificates:
+            - certificate_chain: { filename: /etc/envoy/certs/server.crt }
+              private_key: { filename: /etc/envoy/certs/server.key }
+      filters:
+      - name: envoy.filters.network.http_connection_manager
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+          stat_prefix: ingress_ecdsa
+          route_config:
+            name: local
+            virtual_hosts:
+            - name: legacy
+              domains: ["*"]
+              routes:
+              - match: { prefix: "/" }
+                route: { cluster: legacy_backend }
+          http_filters:
+          - name: envoy.filters.http.router
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+  - name: mldsa_listener
+    address:
+      socket_address: { address: 0.0.0.0, port_value: 8444 }
+    filter_chains:
+    - transport_socket:
+        name: envoy.transport_sockets.tls
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
+          common_tls_context:
+            tls_params:
+              tls_minimum_protocol_version: TLSv1_3
+              ecdh_curves:
+              - X25519MLKEM768
+              - X25519
+            tls_certificates:
+            - certificate_chain: { filename: /etc/envoy/certs-mldsa/server.crt }
+              private_key: { filename: /etc/envoy/certs-mldsa/server.key }
+      filters:
+      - name: envoy.filters.network.http_connection_manager
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+          stat_prefix: ingress_mldsa
+          route_config:
+            name: local
+            virtual_hosts:
+            - name: legacy
+              domains: ["*"]
+              routes:
+              - match: { prefix: "/" }
+                route: { cluster: legacy_backend }
+          http_filters:
+          - name: envoy.filters.http.router
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+  clusters:
+  - name: legacy_backend
+    type: STRICT_DNS
+    connect_timeout: 2s
+    transport_socket:
+      name: envoy.transport_sockets.tls
+      typed_config:
+        "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+        sni: legacy-app
+        common_tls_context:
+          tls_params:
+            tls_minimum_protocol_version: TLSv1_3
+            tls_maximum_protocol_version: TLSv1_3
+            ecdh_curves:
+            - X25519MLKEM768
+          validation_context:
+            trusted_ca: { filename: /etc/envoy/sidecar-ca/sidecar.crt }
+            match_typed_subject_alt_names:
+            - san_type: DNS
+              matcher: { exact: legacy-app }
+    load_assignment:
+      cluster_name: legacy_backend
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address: { address: legacy-app, port_value: 8445 }
