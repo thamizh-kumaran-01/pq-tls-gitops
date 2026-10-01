@@ -95,3 +95,4 @@ static_resources:
         - endpoint:
             address:
               socket_address: { address: legacy-app, port_value: 8445 }
+# crypto-agility demo 1790838434
